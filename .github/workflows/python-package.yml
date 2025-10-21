@@ -1,80 +1,138 @@
 name: Python package
-
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12"]
-        include:
-          - os: ubuntu-latest
-            path: ~/.cache/pip
-          - os: macos-latest
-            path: ~/Library/Caches/pip
-          - os: windows-latest
-            path: ~\AppData\Local\pip\Cache
-
     steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          task: start-measurement
       - name: Checkout code
         uses: actions/checkout@v3
-
       - name: Set up Python
         uses: conda-incubator/setup-miniconda@v3
         with:
-          channels: conda-forge,defaults
           channel-priority: strict
+          channels: conda-forge,defaults
           python-version: ${{ matrix.python-version }}
+      - if: runner.os != 'macOS'
+        name: Install TensorFlow
+        run: 'pip install tensorflow tensorpack==0.11 tf_slim==1.1.0 tf-keras
 
-      - name: Install TensorFlow
-        shell: bash -el {0}  # Important: activates the conda environment
-        if: runner.os != 'macOS'
-        run: |
-          pip install tensorflow tensorpack==0.11 tf_slim==1.1.0 tf-keras
+          '
+        shell: bash -el {0}
+      - id: measurement-4
+        name: Record Measurement After Install TensorFlow
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Install TensorFlow
+          task: get-measurement
+      - if: runner.os == 'macOS'
+        name: Install TensorFlow on macOS
+        run: 'pip install tensorflow-macos tensorpack==0.11 tf_slim==1.1.0 tf-keras
 
-      - name: Install TensorFlow on macOS
-        shell: bash -el {0}  # Important: activates the conda environment
-        if: runner.os == 'macOS'
-        run: |
-          pip install tensorflow-macos tensorpack==0.11 tf_slim==1.1.0 tf-keras
-
+          '
+        shell: bash -el {0}
+      - id: measurement-6
+        name: Record Measurement After Install TensorFlow on macOS
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Install TensorFlow on macOS
+          task: get-measurement
       - name: Install dependencies
-        shell: bash -el {0}  # Important: activates the conda environment
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
+        run: 'python -m pip install --upgrade pip setuptools wheel
+
           pip install -r requirements.txt
 
+          '
+        shell: bash -el {0}
+      - id: measurement-8
+        name: Record Measurement After Install dependencies
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Install dependencies
+          task: get-measurement
       - name: Install ffmpeg
-        run: |
-          if [ "$RUNNER_OS" == "Linux" ]; then
-            sudo apt-get update
-            sudo apt-get install ffmpeg
-          elif [ "$RUNNER_OS" == "macOS" ]; then
-            brew install ffmpeg || true
-          else
-            choco install ffmpeg
-          fi
+        run: "if [ \"$RUNNER_OS\" == \"Linux\" ]; then\n  sudo apt-get update\n  sudo\
+          \ apt-get install ffmpeg\nelif [ \"$RUNNER_OS\" == \"macOS\" ]; then\n \
+          \ brew install ffmpeg || true\nelse\n  choco install ffmpeg\nfi\n"
         shell: bash
-
+      - id: measurement-10
+        name: Record Measurement After Install ffmpeg
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Install ffmpeg
+          task: get-measurement
       - name: Run pytest tests
-        shell: bash -el {0}  # Important: activates the conda environment
-        run: |
-          pip install pytest
+        run: 'pip install pytest
+
           python -m pytest
 
+          '
+        continue-on-error: true
+        shell: bash -el {0}
+      - id: measurement-12
+        name: Record Measurement After Run pytest tests
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Run pytest tests
+          task: get-measurement
       - name: Run functional tests
-        shell: bash -el {0}  # Important: activates the conda environment
-        run: |
-          pip install git+https://github.com/${{ github.repository }}.git@${{ github.sha }}
+        run: 'pip install git+https://github.com/${{ github.repository }}.git@${{
+          github.sha }}
+
           python examples/testscript.py
+
           python examples/testscript_multianimal.py
+
           python examples/testscript_pytorch_single_animal.py
+
           python examples/testscript_pytorch_multi_animal.py
+
+          '
+        continue-on-error: true
+        shell: bash -el {0}
+      - id: measurement-14
+        name: Record Measurement After Run functional tests
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Run functional tests
+          task: get-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run: echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption
+          path: total_energy_consumption.json
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            path: ~/.cache/pip
+      
+        os:
+          - ubuntu-latest
+        python-version:
+          - '3.10'
+          - '3.11'
+          - '3.12'
